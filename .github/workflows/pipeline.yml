@@ -1,0 +1,56 @@
+# This workflow will build a Java project with Maven, and cache/restore any dependencies to improve the workflow execution time
+# For more information see: https://docs.github.com/en/actions/automating-builds-and-tests/building-and-testing-java-with-maven
+
+# This workflow uses actions that are not certified by GitHub.
+# They are provided by a third-party and are governed by
+# separate terms of service, privacy policy, and support
+# documentation.
+
+name: Java CI with Maven
+
+on:
+  workflow_dispatch:
+
+jobs:
+  build-and-test:
+    name: Build and test
+    strategy:
+      matrix:
+        os: [ubuntu-latest, windows-11-arm]
+      fail-fast: false
+    runs-on: ${{ matrix.os }}
+
+    steps:
+    - uses: actions/checkout@v3
+    - name: Docker Compose Action
+      if: runner.os == 'Linux'
+      uses: isbang/compose-action@v1.5.1
+    - name: Set up PostgreSQL (Windows)
+      if: runner.os == 'Windows'
+      env:
+        PGPASSWORD: root
+      run: |
+        choco install postgresql17 -y --no-progress --params "/Password:root /Port:15432"
+        & "$env:ProgramFiles\PostgreSQL\17\bin\psql.exe" -h localhost -p 15432 -U postgres -c "CREATE USER testuser WITH SUPERUSER PASSWORD 'testpassword';" -c "CREATE DATABASE testuser OWNER testuser;"
+    - name: Set up JDK 21 for building and testing
+      uses: actions/setup-java@v4
+      with:
+        java-version: '21'
+        distribution: 'temurin'
+        cache: maven
+    - name: Print java version
+      run: java -version
+    - name: Build and test with Maven java 21
+      run: mvn -B package --file pom.xml
+    - name: Set up JDK 17 for testing
+      uses: actions/setup-java@v4
+      with:
+        java-version: '17'
+        distribution: ${{ runner.os == 'Windows' && 'microsoft' || 'temurin' }}
+        cache: maven
+    - name: Print java version
+      run: java -version
+    - name: Test with Maven java 17
+      run: mvn test
+
+    timeout-minutes: 150
